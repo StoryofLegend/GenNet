@@ -5,8 +5,8 @@
 # Output: processed_data/genotype.h5
 #
 #SBATCH --job-name=GenNet_convert
-#SBATCH --output=logs/00_setup/conv_%j.out
-#SBATCH --error=logs/00_setup/conv_%j.err
+#SBATCH --output=/home/u/f099193/_SHARE_/Research/GEN/BIO3/Kristian/exp/GenNet/logs/00_setup/conv_%j.out
+#SBATCH --error=/home/u/f099193/_SHARE_/Research/GEN/BIO3/Kristian/exp/GenNet/logs/00_setup/conv_%j.err
 #SBATCH --partition=all_5hrs
 #SBATCH --time=02:00:00
 #SBATCH --ntasks=1

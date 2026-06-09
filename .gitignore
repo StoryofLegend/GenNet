@@ -1,25 +1,40 @@
-# Default ignored files
+# IDE
+.idea/
 /shelf/
 /workspace.xml
-# Datasource local storage ignored files
 /dataSources/
 /dataSources.local.xml
-# Editor-based HTTP Client requests
 /httpRequests/
-# jupyter notebooks
-.ipynb_checkpoints
+*.swp
+
+# Python
 __pycache__/
-# processed data
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# SLURM logs
+logs/
+
+# Raw data symlinks (machine-specific, not portable)
+raw_data_input/
+
+# Processed data — large binary files, never commit these
 processed_data/*
 !processed_data/.gitkeep
-# results
+
+# Results — model weights and arrays, too large for git
 results/*
 !results/.gitkeep
-# idea
-.idea/
-.idea/*
-.swp
-*.swp
-.log
+
+# Large binary formats
+*.h5
+*.npy
+*.npz
+
+# LibreOffice lock files
+.~lock.*
+
+# Misc
 *.log
 examples/A_to_Z/processed_data/*
