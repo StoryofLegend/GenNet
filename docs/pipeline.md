@@ -202,3 +202,41 @@ Joins genes to CPDB pathways. Genes with no pathway annotation are removed (they
 ```bash
 python pipeline/01_topology/06_add_cpdb_pathways.py
 ```
+
+---
+
+## Step 3 — subjects.csv and seed directories
+
+### Step 3a — Create subjects.csv
+
+Reads the PLINK .fam file and the PCA eigenvector file, creates a stratified 65/20/15 train/val/test split, and saves `subjects.csv`. The split uses `random_state=42` and is identical for all seeds — the seed only affects model training, not data splitting.
+
+**Script:** `pipeline/02_subjects/create_subjects.py`
+
+| Column | Description |
+|---|---|
+| `patient_id` | Subject identifier from .fam |
+| `labels` | 0 = control, 1 = case (converted from PLINK 1/2 encoding) |
+| `genotype_row` | Row index in genotype.h5 |
+| `set` | 1 = train, 2 = val, 3 = test |
+| `cov_1…cov_7` | First 7 principal components |
+
+**Output:** `processed_data/subjects.csv`
+
+**Run:**
+```bash
+sbatch pipeline/02_subjects/run_create_subjects.sh
+```
+
+---
+
+### Step 3b — Set up per-seed directories
+
+Creates `processed_data/seed_N/` for seeds 42–46. Each directory gets a copy of `topology_final.csv` (as `topology.csv`), a copy of `subjects.csv`, and a symlink to the shared `genotype.h5`.
+
+**Script:** `pipeline/02_subjects/setup_seed_dirs.sh`
+
+**Run:**
+```bash
+bash pipeline/02_subjects/setup_seed_dirs.sh
+```
