@@ -88,7 +88,7 @@ def train_model(args):
                                                   verbose=1, save_best_only=True, mode='auto')
 
     reduce_lr = K.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                              patience=5, min_lr=0.001)
+                                              patience=5, min_lr=1e-7)
 
     if os.path.exists(args.resultpath + '/bestweights_job.h5') and not(args.resume):
         print('Model already Trained')
@@ -254,7 +254,8 @@ def get_network(args):
     args.improved_norm = args.improved_norm if hasattr(args, 'improved_norm') else False
     args.L1 = args.L1 if hasattr(args, 'L1') else 0
     args.L1_act = args.L1_act if hasattr(args, 'L1_act') else 0
-    
+    args.hidden_activation = args.hidden_activation if hasattr(args, 'hidden_activation') else None
+
     batchnorm = not(args.improved_norm)
 
     global weight_positive_class, weight_negative_class
@@ -291,18 +292,18 @@ def get_network(args):
                                                      filters=args.filters, one_hot=args.onehot)
     else:
         if os.path.exists(args.datapath + "/topology.csv"):
-            model, masks = create_network_from_csv(datapath=args.datapath, inputsize=args.inputsize, 
+            model, masks = create_network_from_csv(datapath=args.datapath, inputsize=args.inputsize,
                                                    genotype_path=args.genotype_path,
                                                    l1_value=args.L1, L1_act=args.L1_act, regression=regression,
                                                    num_covariates=args.num_covariates, one_hot=args.onehot,
-                                                   batchnorm=batchnorm )
+                                                   batchnorm=batchnorm, hidden_activation=args.hidden_activation)
         elif len(glob.glob(args.datapath + "/*.npz")) > 0:
-            model, masks = create_network_from_npz(datapath=args.datapath, inputsize=args.inputsize, 
+            model, masks = create_network_from_npz(datapath=args.datapath, inputsize=args.inputsize,
                                                    genotype_path=args.genotype_path,
                                                    l1_value=args.L1, L1_act=args.L1_act, regression=regression,
                                                    num_covariates=args.num_covariates, one_hot=args.onehot,
                                                    mask_order=args.mask_order if hasattr(args, 'mask_order') else None,
-                                                   batchnorm=batchnorm)
+                                                   batchnorm=batchnorm, hidden_activation=args.hidden_activation)
 
     optimizer_model = Adam(lr=args.learning_rate)
 
