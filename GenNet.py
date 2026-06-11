@@ -257,7 +257,11 @@ class ArgumentParser():
             action='store_true',
             default=False,
             help='Use the pervariantnorm layer instead of batchnorm for better normalization for interpretation')
-            
+        parser_train.add_argument(
+            "-hidden_activation",
+            default=None, type=str,
+            help="Activation function for hidden layers. Overrides default: tanh for classification, relu for regression")
+
         return parser_train
 
     def make_parser_plot(self, parser_plot):
