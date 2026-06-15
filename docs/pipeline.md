@@ -240,3 +240,109 @@ Creates `processed_data/seed_N/` for seeds 42–46. Each directory gets a copy o
 ```bash
 bash pipeline/02_subjects/setup_seed_dirs.sh
 ```
+
+---
+
+## Step 4 — Train GenNet (hyperparameter grid search)
+
+Trains the GenNet model on `processed_data/seed_42/`. Three grid searches are
+run, one per hidden-layer activation function (tanh, relu, softplus), to compare
+activation choices (Month 2 methodological comparison — see
+[`project_context.md`](project_context.md)).
+
+Each grid search is a SLURM **job array of 8 tasks** sweeping:
+
+- learning rate ∈ `{0.0001, 0.001, 0.01, 0.1}`
+- L1 regularisation ∈ `{0.01, 0.001}`
+
+Common settings: `-epochs 200`, `-bs 64`, `-patience 15`,
+`-problem_type classification`. Each task writes to its own experiment ID under
+`results/GenNet_experiment_<ID>_/`.
+
+### Step 4a — tanh activation (default)
+
+`-hidden_activation` is omitted, so GenNet uses its default for classification
+(**tanh**; relu is the default for regression — see `GenNet.py:261`).
+
+**Script:** `pipeline/03_train/run_gridsearch_tanh.sh`
+
+| Array task | Exp ID | lr | L1 |
+|---|---|---|---|
+| 1 | 100 | 0.0001 | 0.01 |
+| 2 | 101 | 0.001 | 0.01 |
+| 3 | 102 | 0.01 | 0.01 |
+| 4 | 103 | 0.1 | 0.01 |
+| 5 | 104 | 0.0001 | 0.001 |
+| 6 | 105 | 0.001 | 0.001 |
+| 7 | 106 | 0.01 | 0.001 |
+| 8 | 107 | 0.1 | 0.001 |
+
+**Run:**
+```bash
+sbatch pipeline/03_train/run_gridsearch_tanh.sh
+```
+
+### Step 4b — relu activation
+
+Same grid, with `-hidden_activation relu`, experiment IDs offset to the 200 range.
+
+**Script:** `pipeline/03_train/run_gridsearch_relu.sh`
+
+| Array task | Exp ID | lr | L1 |
+|---|---|---|---|
+| 1 | 200 | 0.0001 | 0.01 |
+| 2 | 201 | 0.001 | 0.01 |
+| 3 | 202 | 0.01 | 0.01 |
+| 4 | 203 | 0.1 | 0.01 |
+| 5 | 204 | 0.0001 | 0.001 |
+| 6 | 205 | 0.001 | 0.001 |
+| 7 | 206 | 0.01 | 0.001 |
+| 8 | 207 | 0.1 | 0.001 |
+
+**Run:**
+```bash
+sbatch pipeline/03_train/run_gridsearch_relu.sh
+```
+
+### Step 4c — softplus activation
+
+Same grid, with `-hidden_activation softplus`, experiment IDs in the 300 range.
+Softplus (`log(1 + eˣ)`) is a smooth, strictly-positive relu analog, chosen as a
+third activation to test (Month 2 comparison). Its smoothness gives more stable
+gradient/SHAP-based importance than relu's kink at 0, and its non-negativity
+avoids sign-cancellation when ISN edges are formed as products of node
+activations — both relevant to the project's importance-stability focus (see
+[`project_context.md`](project_context.md)).
+
+**Script:** `pipeline/03_train/run_gridsearch_softplus.sh`
+
+| Array task | Exp ID | lr | L1 |
+|---|---|---|---|
+| 1 | 300 | 0.0001 | 0.01 |
+| 2 | 301 | 0.001 | 0.01 |
+| 3 | 302 | 0.01 | 0.01 |
+| 4 | 303 | 0.1 | 0.01 |
+| 5 | 304 | 0.0001 | 0.001 |
+| 6 | 305 | 0.001 | 0.001 |
+| 7 | 306 | 0.01 | 0.001 |
+| 8 | 307 | 0.1 | 0.001 |
+
+**Run:**
+```bash
+sbatch pipeline/03_train/run_gridsearch_softplus.sh
+```
+
+### Output (per experiment)
+
+Each `results/GenNet_experiment_<ID>_/` contains:
+
+| File | Description |
+|---|---|
+| `bestweights_job.h5` | Best model weights (lowest val loss) |
+| `connection_weights.csv` | Learned layer connection weights (input for importance analysis) |
+| `model_architecture.txt` | Layer-by-layer architecture |
+| `train_args.json` | Exact arguments used for the run |
+| `train_log.csv` | Per-epoch loss/metrics |
+| `train_val_loss.png` | Train vs validation loss curve |
+| `pval.npy`, `ptest.npy` | Predicted probabilities (val / test) |
+| `results_summary.txt`, `pd_summary_results.csv` | Final performance summary |
