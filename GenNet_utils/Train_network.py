@@ -88,7 +88,7 @@ def train_model(args):
                                                   verbose=1, save_best_only=True, mode='auto')
 
     reduce_lr = K.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                              patience=5, min_lr=1e-7)
+                                              patience=5, min_lr=1e-6)
 
     if os.path.exists(args.resultpath + '/bestweights_job.h5') and not(args.resume):
         print('Model already Trained')
