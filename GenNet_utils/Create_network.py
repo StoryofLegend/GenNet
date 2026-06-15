@@ -55,11 +55,13 @@ def regression_properties(datapath):
     return mean_ytrain, negative_values_ytrain
 
 
-def layer_block(model, mask, i, regression, L1_act=0.01,  batchnorm=True):
-    if regression:
-        activation_type="relu"
+def layer_block(model, mask, i, regression, L1_act=0.01, batchnorm=True, hidden_activation=None):
+    if hidden_activation is not None:
+        activation_type = hidden_activation
+    elif regression:
+        activation_type = "relu"
     else:
-        activation_type="tanh"
+        activation_type = "tanh"
     
     model = LocallyDirected1D(mask=mask, filters=1, input_shape=(mask.shape[0], 1),
                               name="LocallyDirected_" + str(i), activity_regularizer=K.regularizers.l1(L1_act))(model)
@@ -122,7 +124,8 @@ def create_network_from_npz(datapath,
                             one_hot = False,
                             num_covariates=0,
                             mask_order = [],
-                            batchnorm = True):
+                            batchnorm = True,
+                            hidden_activation=None):
     print("Creating networks from npz masks")
     print("regression", regression)
     print("one_hot", one_hot)
@@ -187,7 +190,7 @@ def create_network_from_npz(datapath,
 
     for i in range(len(masks)):
         mask = masks[i]
-        model = layer_block(model, mask, i, regression, L1_act=L1_act, batchnorm=True)
+        model = layer_block(model, mask, i, regression, L1_act=L1_act, batchnorm=True, hidden_activation=hidden_activation)
 
     model = K.layers.Flatten()(model)
 
@@ -212,15 +215,16 @@ def create_network_from_npz(datapath,
 
 
 
-def create_network_from_csv(datapath, 
-                            inputsize, 
+def create_network_from_csv(datapath,
+                            inputsize,
                             genotype_path,
-                            l1_value=0.01, 
-                            L1_act =0.01, 
+                            l1_value=0.01,
+                            L1_act =0.01,
                             regression=False,
                             one_hot=False,
                             num_covariates=0,
-                            batchnorm=True):
+                            batchnorm=True,
+                            hidden_activation=None):
     
     print("Creating networks from npz masks")
     print("regression", regression)
@@ -258,7 +262,7 @@ def create_network_from_csv(datapath,
             matrixshape = (network_csv[columns[i]].max() + 1, network_csv[columns[i + 1]].max() + 1)
         mask = scipy.sparse.coo_matrix(((matrix_ones), matrix_coord), shape = matrixshape)
         masks.append(mask)
-        model = layer_block(model, mask, i, regression, L1_act=L1_act, batchnorm=batchnorm)
+        model = layer_block(model, mask, i, regression, L1_act=L1_act, batchnorm=batchnorm, hidden_activation=hidden_activation)
 
     model = K.layers.Flatten()(model)
 
