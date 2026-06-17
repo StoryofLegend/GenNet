@@ -62,6 +62,18 @@ Define evaluation metrics **in advance**:
 > ranking / importance / activation-score measures** for genes and gene pairs.
 > Stability measures should be grounded in the ML literature.
 
+> **Methodological clarification (supervisor, June 2026) — evaluate the whole
+> pipeline, not isolated components.** Each configuration (activation function,
+> CORUM vs pathway inner layer, …) must be carried through the **entire
+> pipeline end-to-end** — train the model → compute gene importance → build ISNs
+> → evaluate HotZone metrics — and judged there. Do **not** compare only at the
+> GenNet level (predictive performance / gene-ranking stability), pick a single
+> winner, and carry just that one config forward into ISN + HotZone. The reason:
+> a component that looks best in isolation may not be best *in tandem*, because
+> the final objective (its downstream use) has changed. A config that wins on
+> GenNet metrics can lose once ISN construction and HotZone hotness are the
+> targets, so the comparison has to be made against the final goal.
+
 ### Month 3 — Connect GenNet outputs to ISN design
 - Select only **1–2 node definitions** and **1–2 edge definitions**.
 - Edge definitions may make more/less sense depending on the activation-function

@@ -349,17 +349,61 @@ Each `results/GenNet_experiment_<ID>_/` contains:
 
 ---
 
-## Step 5 — Multi-seed stability (best config)
+## Step 5 — Report grids, then multi-seed stability (best config per activation)
 
-To assess reproducibility across data splits, the **best** grid-search config is
-re-trained on every seed directory. Because each `seed_N` holds a different
-train/val/test split (Step 3a), this measures stability of performance and of
-gene/pathway importance across splits (a core goal — see
-[`project_context.md`](project_context.md)).
+After each grid search finishes, the runs are organised by activation, summarised
+into a CSV, and the best config **per activation** is re-trained on every seed
+directory. Because each `seed_N` holds a different train/val/test split (Step 3a),
+this measures stability of performance and of gene/pathway importance across
+splits (a core goal — see [`project_context.md`](project_context.md)).
 
-### Step 5a — Select the best config
+> **Both activations are carried forward, not just the single best one.** Per the
+> supervisor's methodological clarification (see [`project_context.md`](project_context.md)
+> §2), the *whole* pipeline is evaluated per configuration, so tanh and relu each
+> get a multi-seed run and continue into ISN/HotZone — we do not pick one
+> activation at the GenNet level and drop the other.
 
-Selection is by **validation** AUC (not test). For the tanh grid:
+### Step 5a — Organise results by activation and summarise the grids
+
+The experiment folders are grouped into per-activation subfolders for browsing.
+The experiment IDs already namespace the activation (100s = tanh, 200s = relu,
+300s = softplus), so the move is a same-filesystem rename (instant, no copy of the
+multi-GB `connection_weights.csv`):
+
+```bash
+mkdir -p results/tanh results/relu results/softplus
+mv results/GenNet_experiment_10?_ results/tanh/
+mv results/GenNet_experiment_20?_ results/relu/
+mv results/GenNet_experiment_30?_ results/softplus/   # when softplus is done
+```
+
+> GenNet always writes to `results/` (top level); it has no notion of these
+> subfolders. So every later run (including the multi-seed jobs below) lands in
+> `results/GenNet_experiment_<ID>_/` and must be moved into its activation folder
+> afterwards.
+
+**Script:** `pipeline/04_report/summarize_gridsearch.py` — point it at one
+activation folder; it reads each run's `train_args.json` (hyperparameters) and
+`pd_summary_results.csv` (AUCs), and writes one CSV sorted by validation AUC into
+`reports/gridsearch/`. The activation is read from `hidden_activation` in the
+JSON (not the folder name), so a misfiled run still lands in the right CSV.
+
+```bash
+python pipeline/04_report/summarize_gridsearch.py results/tanh   # -> reports/gridsearch/tanh_gridsearch.csv
+python pipeline/04_report/summarize_gridsearch.py results/relu   # -> reports/gridsearch/relu_gridsearch.csv
+```
+
+`results/` is gitignored (large weight files), but `reports/` is **not** — the
+small CSVs there are the publishable artefacts. Each row carries the
+hyperparameters, `epochs_trained`, `best_val_loss`, and `auc_val`/`auc_test`; the
+`seed` column makes the multi-seed AUC spread readable directly once Step 5c/5d
+runs are added.
+
+### Step 5b — Select the best config (per activation)
+
+Selection is by **validation** AUC (not test).
+
+**tanh grid** — winner exp 105:
 
 | Rank | Exp | lr | L1 | val AUC | test AUC |
 |---|---|---|---|---|---|
@@ -368,11 +412,22 @@ Selection is by **validation** AUC (not test). For the tanh grid:
 | 3 | 101 | 0.001 | 0.01 | 0.6218 | 0.6205 |
 | … | … | … | … | (rest ≈ 0.61) | |
 
-Winner: **lr=0.001, L1=0.001, tanh** (exp 105, on seed_42).
+**relu grid** — winner exp 205:
 
-### Step 5b — Re-train the winner across seeds
+| Rank | Exp | lr | L1 | val AUC | test AUC |
+|---|---|---|---|---|---|
+| 1 | **205** | 0.001 | 0.001 | 0.7255 | 0.7282 |
+| 2 | 200 | 0.0001 | 0.01 | 0.7209 | 0.7149 |
+| 3 | 202 | 0.01 | 0.01 | 0.6148 | 0.6129 |
+| … | … | … | … | (rest ≈ 0.61) | |
 
-Trains the winning config on seeds 43–46 (seed_42 = exp 105 is already the 5th
+Both activations select the **same coordinate** (`lr=0.001, L1=0.001`,
+`L1_act=0.01`), and relu outperforms tanh at the optimum (val 0.7255 vs 0.7036,
+test 0.7282 vs 0.7073).
+
+### Step 5c — Re-train the tanh winner across seeds
+
+Trains the tanh winner on seeds 43–46 (seed_42 = exp 105 is already the 5th
 member of the stability set). GenNet has no seed flag, so model-weight init is an
 additional uncontrolled source of variation on top of the split differences.
 
@@ -386,11 +441,59 @@ additional uncontrolled source of variation on top of the split differences.
 | 3 | 145 | seed_45 |
 | 4 | 146 | seed_46 |
 
-**Run:**
+### Step 5d — Re-train the relu winner across seeds
+
+Same scheme for relu (seed_42 = exp 205 is the anchor), with
+`-hidden_activation relu` and exp IDs in the 24x range.
+
+**Script:** `pipeline/03_train/run_multiseed_relu_best.sh`
+
+| Array task | Exp ID | Seed dir |
+|---|---|---|
+| (anchor) | 205 | seed_42 |
+| 1 | 243 | seed_43 |
+| 2 | 244 | seed_44 |
+| 3 | 245 | seed_45 |
+| 4 | 246 | seed_46 |
+
+**Run (both):**
 ```bash
+# validate the per-epoch time on one seed first, then launch the rest
+sbatch --array=1 pipeline/03_train/run_multiseed_relu_best.sh
+sbatch --array=2-4 pipeline/03_train/run_multiseed_relu_best.sh
 sbatch pipeline/03_train/run_multiseed_tanh_best.sh
 ```
 
-Stability is then assessed across exp {105, 143, 144, 145, 146}: AUC spread, and
-overlap/rank-correlation of gene/pathway importances from each run's
+Afterwards, move the new runs into their activation folders and re-run the
+summary (it picks up all 5 seeds per activation automatically):
+```bash
+mv results/GenNet_experiment_14?_ results/tanh/
+mv results/GenNet_experiment_24?_ results/relu/
+python pipeline/04_report/summarize_gridsearch.py results/tanh
+python pipeline/04_report/summarize_gridsearch.py results/relu
+```
+
+### Resource settings (CPU-only cluster)
+
+Training runs **on CPU** — the `env_GenNet` TensorFlow cannot load the cluster's
+CUDA libraries (it wants CUDA 11 / cuDNN 8; the module is `cuda12.2`), so it falls
+back to CPU at ~10 min/epoch (~13 h per model at the winner config). The
+multi-seed scripts are tuned for this:
+
+| `#SBATCH` | Value | Reason |
+|---|---|---|
+| `--partition` | `all_5days` | a real CPU partition (the old `gpu` was not in the partition list and gave no GPU) |
+| `--mem` | `32G` | GenNet streams genotypes from HDF5 in minibatches; the old 360 GB request (`mem-per-cpu=90000 × 4`) blocked parallel packing so only 2 of 4 array tasks ran at once |
+| `--time` | `24:00:00` | the ~13 h winner config fits with margin; aids backfill |
+| `-workers` | `4` | the data generator opens `genotype.h5` once **per batch** (`Dataloader.py:145`), single-threaded → I/O-bound; `>1` workers auto-enable multiprocessing (`Train_network.py:47`) to prefetch batches in parallel and overlap I/O with compute. Throughput only — does not change results. |
+
+`-bs` and `-lr` are **not** changed for the multi-seed runs: they must reproduce
+the grid winner exactly, or the cross-seed stability comparison is no longer
+apples-to-apples.
+
+### Assessing stability
+
+Stability is assessed **within each activation** across its 5 seeds — tanh exp
+{105, 143, 144, 145, 146} and relu exp {205, 243, 244, 245, 246}: AUC spread, and
+overlap / rank-correlation of gene/pathway importances from each run's
 `connection_weights.csv`.
