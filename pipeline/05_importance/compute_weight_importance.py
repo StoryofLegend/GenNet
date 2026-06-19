@@ -42,8 +42,17 @@ def _names(topology: pd.DataFrame, layer: int) -> pd.DataFrame:
             .rename(columns={f"layer{layer}_node": "node", f"layer{layer}_name": "name"}))
 
 
-def gene_pathway_edges(model, masks, topology: pd.DataFrame, edge_agg: str) -> pd.DataFrame:
-    """One effective weight per (gene, pathway), collapsing duplicate edges by edge_agg."""
+def gene_pathway_edges(model, masks, topology: pd.DataFrame) -> pd.DataFrame:
+    """One effective weight per (gene, pathway).
+
+    The topology repeats each gene->pathway connection (once per SNP, and once per
+    node a gene name is split across), so the raw edge has several weights. We
+    collapse them to one effective weight by the MEAN of the signed weights, then
+    take the magnitude: mean is the representative central value and uses all the
+    duplicates, whereas a sum would scale with annotation density (a topology
+    artefact, not signal). Aggregating signed-then-abs makes opposite-sign
+    duplicates of the same connection cancel, i.e. it captures the net effect.
+    """
     mask = masks[1]                                       # gene (row) -> pathway (col)
     e = pd.DataFrame({"gene_node": mask.row, "pathway_node": mask.col})
     e = e.sort_values("gene_node").reset_index(drop=True)
@@ -56,11 +65,10 @@ def gene_pathway_edges(model, masks, topology: pd.DataFrame, edge_agg: str) -> p
 
     n_raw = len(e)
     edges = e.groupby(["gene", "pathway_node", "pathway"], as_index=False).agg(
-        weight=("weight", edge_agg))
+        weight=("weight", "mean"))
     edges["abs_w"] = edges["weight"].abs()
     print(f"  {n_raw} raw -> {len(edges)} gene->pathway connections "
-          f"({edges['gene'].nunique()} genes, {edges['pathway_node'].nunique()} pathways, "
-          f"edge_agg={edge_agg})")
+          f"({edges['gene'].nunique()} genes, {edges['pathway_node'].nunique()} pathways)")
     return edges
 
 
@@ -72,8 +80,7 @@ def gene_importance(edges: pd.DataFrame) -> pd.DataFrame:
     return g.sort_values("importance_sum", ascending=False).reset_index(drop=True)
 
 
-def pathway_importance(model, topology: pd.DataFrame, edges: pd.DataFrame,
-                       edge_agg: str) -> pd.DataFrame:
+def pathway_importance(model, topology: pd.DataFrame, edges: pd.DataFrame) -> pd.DataFrame:
     """importance = |w_pathway->output| (outgoing weight, like the gene view)."""
     w_out = model.get_layer("output_layer").get_weights()[0].flatten()
     pw = pd.DataFrame({"pathway_node": np.arange(len(w_out)), "importance": np.abs(w_out)})
@@ -81,7 +88,7 @@ def pathway_importance(model, topology: pd.DataFrame, edges: pd.DataFrame,
                   on="pathway_node")
     pw = pw.merge(edges.groupby("pathway_node")["gene"].nunique().rename("degree"),
                   on="pathway_node")
-    p = pw.groupby("pathway").agg(importance=("importance", edge_agg),
+    p = pw.groupby("pathway").agg(importance=("importance", "mean"),
                                   degree=("degree", "sum")).reset_index()
     return p.sort_values("importance", ascending=False).reset_index(drop=True)
 
@@ -142,9 +149,6 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("exp_dir", help="A GenNet_experiment_<ID>_ folder (has bestweights_job.h5)")
     ap.add_argument("--name", default=None, help="Output subfolder (default: experiment folder name)")
-    ap.add_argument("--edge-agg", choices=["mean", "median", "sum"], default="mean",
-                    help="Collapse duplicate gene->pathway weights (default: mean; "
-                         "'sum' = forward-pass faithful)")
     ap.add_argument("--max-genes-per-pathway", type=int, default=200,
                     help="Skip hub pathways larger than this for pairs (default: 200)")
     ap.add_argument("--top-n", type=int, default=20, help="Bars per plot (default: 20)")
@@ -158,10 +162,10 @@ def main() -> None:
 
     print(f"Loading model from {exp_dir} ...")
     model, masks, topology = load_model_and_topology(exp_dir)
-    edges = gene_pathway_edges(model, masks, topology, args.edge_agg)
+    edges = gene_pathway_edges(model, masks, topology)
 
     genes = gene_importance(edges)
-    pathways = pathway_importance(model, topology, edges, args.edge_agg)
+    pathways = pathway_importance(model, topology, edges)
     pairs = pair_importance(edges, args.max_genes_per_pathway)
 
     out_dir = Path(args.out_dir) / (args.name or exp_dir.name.strip("_"))

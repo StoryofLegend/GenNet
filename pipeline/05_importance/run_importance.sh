@@ -6,7 +6,7 @@
 #
 # Usage:
 #   bash pipeline/05_importance/run_importance.sh results/tanh
-#   bash pipeline/05_importance/run_importance.sh results/relu --edge-agg mean
+#   bash pipeline/05_importance/run_importance.sh results/relu --no-plots
 #
 # Output: reports/importance/<exp-folder>/{gene,pathway,pair}_importance.csv
 

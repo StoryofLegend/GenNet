@@ -550,11 +550,13 @@ nodes, so it is interpretation/QC only — compute it on demand, not per seed.
 
 **Duplicate handling (important).** The topology repeats each gene→pathway
 connection once per SNP under the gene, and a gene name can span several node
-indices (e.g. SMAD3 = 3990 rows for 105 real pathways; ACOT7 = 2 nodes). Both are
-collapsed to one effective weight per `(gene, pathway)` with a single
-`--edge-agg` (default `mean`). **Rule: aggregate duplicates by mean/median,
-never `drop_duplicates`.** `--edge-agg sum` instead reproduces the forward-pass
-contribution.
+indices (e.g. SMAD3 = 3990 rows for 105 real pathways; ACOT7 = 2 nodes) — on
+seed_45, ~66% of `(gene, pathway)` connections carry more than one weight. Both
+sources are collapsed to one effective weight per connection by the **mean** of
+the signed weights (then magnitude). **Rule: aggregate duplicates, never
+`drop_duplicates`.** Mean is chosen over median/sum because it is the
+representative central value and uses all duplicates, whereas `sum` would scale
+importance with annotation density (a topology artefact, not signal).
 
 **The hub-bias diagnostic** plots gene degree vs raw importance: for tanh seed_45,
 raw `r = 0.74` (hubs dominate) collapses to normalised `r = −0.01` — i.e. the
