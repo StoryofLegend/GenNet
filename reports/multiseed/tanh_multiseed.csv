@@ -1,0 +1,10 @@
+ID,activation,seed,learning_rate,L1,L1_act,batch_size,epochs,patience,epochs_trained,best_val_loss,auc_val,auc_test,problem_type,slurm_job_id,experiment_dir
+105,tanh,42,0.001,0.001,0.01,64,200,15,67,0.647074,0.7036171837828363,0.7072944089269934,classification,2916333,results/tanh/GenNet_experiment_105_
+143,tanh,43,0.001,0.001,0.01,64,200,15,54,0.651982,0.6862563657763117,0.6927664578931095,classification,2932506,results/tanh/GenNet_experiment_143_
+144,tanh,44,0.001,0.001,0.01,64,200,15,74,0.653234,0.6889052230668188,0.7000558232570351,classification,2932507,results/tanh/GenNet_experiment_144_
+145,tanh,45,0.001,0.001,0.01,64,200,15,83,0.652128,0.6919594980683554,0.7012389759591645,classification,2933458,results/tanh/GenNet_experiment_145_
+146,tanh,46,0.001,0.001,0.01,64,200,15,67,0.649279,0.6990222941609013,0.7016276460440392,classification,2932504,results/tanh/GenNet_experiment_146_
+mean,,n=5,,,,,,,,0.650739,0.693952,0.700597,,,
+std,,n=5,,,,,,,,0.002513,0.007207,0.005195,,,
+min,,n=5,,,,,,,,0.647074,0.686256,0.692766,,,
+max,,n=5,,,,,,,,0.653234,0.703617,0.707294,,,

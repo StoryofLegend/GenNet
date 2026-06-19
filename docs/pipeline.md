@@ -382,15 +382,23 @@ mv results/GenNet_experiment_30?_ results/softplus/   # when softplus is done
 > `results/GenNet_experiment_<ID>_/` and must be moved into its activation folder
 > afterwards.
 
-**Script:** `pipeline/04_report/summarize_gridsearch.py` — point it at one
+**Script:** `pipeline/04_report/summarize_experiments.py` — point it at one
 activation folder; it reads each run's `train_args.json` (hyperparameters) and
-`pd_summary_results.csv` (AUCs), and writes one CSV sorted by validation AUC into
-`reports/gridsearch/`. The activation is read from `hidden_activation` in the
-JSON (not the folder name), so a misfiled run still lands in the right CSV.
+`pd_summary_results.csv` (AUCs), and writes one CSV into `reports/`. The
+activation is read from `hidden_activation` in the JSON (not the folder name), so
+a misfiled run still lands in the right CSV. It has two `--mode`s:
+
+* `gridsearch` (default) — rows sorted by validation AUC (winner first), written
+  to `reports/gridsearch/<folder>_gridsearch.csv`.
+* `multiseed` — for a stability run (same config across seeds): rows sorted by
+  seed plus `mean`/`std`/`min`/`max` aggregate rows, written to
+  `reports/multiseed/<folder>_multiseed.csv`. It auto-restricts the aggregate to
+  the config shared across seeds (so the grid points kept in the same folder
+  don't pollute it); override with `--ids 142-146` if needed.
 
 ```bash
-python pipeline/04_report/summarize_gridsearch.py results/tanh   # -> reports/gridsearch/tanh_gridsearch.csv
-python pipeline/04_report/summarize_gridsearch.py results/relu   # -> reports/gridsearch/relu_gridsearch.csv
+python pipeline/04_report/summarize_experiments.py results/tanh   # -> reports/gridsearch/tanh_gridsearch.csv
+python pipeline/04_report/summarize_experiments.py results/relu   # -> reports/gridsearch/relu_gridsearch.csv
 ```
 
 `results/` is gitignored (large weight files), but `reports/` is **not** — the
@@ -469,8 +477,8 @@ summary (it picks up all 5 seeds per activation automatically):
 ```bash
 mv results/GenNet_experiment_14?_ results/tanh/
 mv results/GenNet_experiment_24?_ results/relu/
-python pipeline/04_report/summarize_gridsearch.py results/tanh
-python pipeline/04_report/summarize_gridsearch.py results/relu
+python pipeline/04_report/summarize_experiments.py results/tanh --mode multiseed
+python pipeline/04_report/summarize_experiments.py results/relu --mode multiseed
 ```
 
 ### Resource settings (CPU-only cluster)

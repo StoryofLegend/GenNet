@@ -3,7 +3,7 @@
 #
 # TODO: fill in the winning hyperparameters once the softplus grid (exp 300-307)
 #       is complete. Select by validation AUC from:
-#         python pipeline/04_report/summarize_gridsearch.py results/softplus
+#         python pipeline/04_report/summarize_experiments.py results/softplus
 #       then set LR and L1 below (and update this comment with the winner exp ID).
 #
 # Each seed_N directory holds a DIFFERENT train/val/test split (the seed is the

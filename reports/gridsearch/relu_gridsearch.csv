@@ -1,9 +1,3 @@
 ID,activation,seed,learning_rate,L1,L1_act,batch_size,epochs,patience,epochs_trained,best_val_loss,auc_val,auc_test,problem_type,slurm_job_id,experiment_dir
 205,relu,42,0.001,0.001,0.01,64,200,15,79,0.645125,0.7254791320917082,0.7281926715571418,classification,2917144,results/relu/GenNet_experiment_205_
 200,relu,42,0.0001,0.01,0.01,64,200,15,72,0.681751,0.7208863255043106,0.7149255100950801,classification,2916881,results/relu/GenNet_experiment_200_
-202,relu,42,0.01,0.01,0.01,64,200,15,200,0.830544,0.6147741102710677,0.6128577382890267,classification,2916979,results/relu/GenNet_experiment_202_
-201,relu,42,0.001,0.01,0.01,64,200,15,57,0.681485,0.6147508326446799,0.612837276642713,classification,2916910,results/relu/GenNet_experiment_201_
-203,relu,42,0.1,0.01,0.01,64,200,15,153,0.783201,0.6147304234592943,0.6128181102934953,classification,2916995,results/relu/GenNet_experiment_203_
-207,relu,42,0.1,0.001,0.01,64,200,15,93,0.696409,0.6120608724158421,0.6138850910373254,classification,2910846,results/relu/GenNet_experiment_207_
-206,relu,42,0.01,0.001,0.01,64,200,15,101,0.671871,0.6120583909867209,0.6139080218437283,classification,2919535,results/relu/GenNet_experiment_206_
-204,relu,42,0.0001,0.001,0.01,64,200,15,112,0.670892,0.6077992797025927,0.6120240931736346,classification,2917063,results/relu/GenNet_experiment_204_
