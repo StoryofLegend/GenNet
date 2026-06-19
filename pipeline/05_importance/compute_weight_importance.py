@@ -108,16 +108,21 @@ def pair_importance(edges: pd.DataFrame, max_genes_per_pathway: int) -> pd.DataF
 
 
 def make_plots(genes: pd.DataFrame, pathways: pd.DataFrame, out_dir: Path, top_n: int) -> None:
-    """Top-N bars + the hub-bias diagnostic (degree vs importance, 1A)."""
-    fig, ax = plt.subplots(1, 2, figsize=(15, 7))
+    """Top-N gene bars, top-N pathway bars, and the hub-bias diagnostic (1A)."""
+    fig, ax = plt.subplots(figsize=(8, 7))
     g = genes.head(top_n)[::-1]
-    ax[0].barh(g["gene"], g["importance_sum"], color="teal")
-    ax[0].set_title(f"Top {top_n} genes  (Sum|w_gene->pathway|)")
-    p = pathways.head(top_n)[::-1]
-    ax[1].barh(p["pathway"].str.slice(0, 45), p["importance"], color="indianred")
-    ax[1].set_title(f"Top {top_n} pathways  (|w_pathway->output|)")
+    ax.barh(g["gene"], g["importance_sum"], color="teal")
+    ax.set_title(f"Top {top_n} genes  (Sum|w_gene->pathway|)")
     fig.tight_layout()
-    fig.savefig(out_dir / "importance_summary.png", dpi=150)
+    fig.savefig(out_dir / "top_genes.png", dpi=150)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+    p = pathways.head(top_n)[::-1]
+    ax.barh(p["pathway"].str.slice(0, 45), p["importance"], color="indianred")
+    ax.set_title(f"Top {top_n} pathways  (|w_pathway->output|)")
+    fig.tight_layout()
+    fig.savefig(out_dir / "top_pathways.png", dpi=150)
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(7, 6))

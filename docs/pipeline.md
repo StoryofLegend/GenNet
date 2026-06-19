@@ -533,7 +533,7 @@ python pipeline/05_importance/summarize_importance.py \
 ```
 
 Outputs per run: `reports/importance/<exp>/{gene,pathway,pair}_importance.csv` plus
-`importance_summary.png` (top-N bars) and `hub_bias_diagnostic.png`; across seeds,
+`top_genes.png`, `top_pathways.png` and `hub_bias_diagnostic.png`; across seeds,
 `reports/importance/tanh_gene_stability.csv`.
 
 **Importance definitions** (all node importance = magnitude of the node's
