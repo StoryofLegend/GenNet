@@ -532,27 +532,34 @@ python pipeline/05_importance/summarize_importance.py \
     reports/importance/GenNet_experiment_{105,143,144,145,146} --name tanh
 ```
 
-Outputs: `reports/importance/<exp>/{gene,pathway,pair}_importance.csv` per run, and
-`reports/importance/tanh_gene_stability.csv` across seeds.
+Outputs per run: `reports/importance/<exp>/{gene,pathway,pair}_importance.csv` plus
+`importance_summary.png` (top-N bars) and `hub_bias_diagnostic.png`; across seeds,
+`reports/importance/tanh_gene_stability.csv`.
 
-**Importance definitions:**
+**Importance definitions** (all node importance = magnitude of the node's
+**outgoing** weights, for consistency):
 
 | Object | Measure | Notes |
 |---|---|---|
 | Gene (node) | `importance_sum = Σ|w_gene→pathway|`; `importance_mean = sum ÷ degree` | `mean` is the connectivity-normalised view (guideline 1A) so hub genes don't dominate |
-| Pathway (node) | `in_importance_sum / mean` over incoming gene→pathway weights, plus `degree` | |
-| Gene pair (i,j) | `Σ_p |w_i→p| · |w_j→p|` over **shared** pathways `p` | non-zero only on existing co-memberships (guideline 1B — GenNet has no gene–gene edge); hub pathways with >200 genes are skipped (`--max-genes-per-pathway`) |
+| Pathway (node) | `importance = |w_pathway→output|`, plus `degree` (# genes) | direct contribution to the logit; a quick biological check (IBD/immune pathways should rank top) |
+| Gene pair (i,j) | `Σ_p |w_i→p| · |w_j→p|` over **shared** pathways `p` | non-zero only on existing co-memberships (guideline 1B — GenNet has no gene–gene edge); hub pathways with >200 genes skipped (`--max-genes-per-pathway`) |
+
+SNP-level importance is intentionally **not** produced: SNPs are inputs, not ISN
+nodes, so it is interpretation/QC only — compute it on demand, not per seed.
 
 **Duplicate handling (important).** The topology repeats each gene→pathway
-connection once per SNP under the gene, so the raw mask holds duplicate
-`(gene_node, pathway_node)` coordinates (e.g. SMAD3 = 3990 rows for 105 real
-pathways, which would inflate importance ~38× and create bogus self-pairs).
-Duplicates are collapsed to one effective weight per connection with
-`--edge-agg` (default `mean`); a gene/pathway *name* spanning multiple node
-indices (e.g. ACOT7 = 2 nodes) is collapsed with `--name-agg` (default `mean`).
-**Rule: aggregate duplicates by mean/median, never `drop_duplicates`.**
-`--edge-agg sum` instead reproduces the forward-pass contribution.
+connection once per SNP under the gene, and a gene name can span several node
+indices (e.g. SMAD3 = 3990 rows for 105 real pathways; ACOT7 = 2 nodes). Both are
+collapsed to one effective weight per `(gene, pathway)` with a single
+`--edge-agg` (default `mean`). **Rule: aggregate duplicates by mean/median,
+never `drop_duplicates`.** `--edge-agg sum` instead reproduces the forward-pass
+contribution.
+
+**The hub-bias diagnostic** plots gene degree vs raw importance: for tanh seed_45,
+raw `r = 0.74` (hubs dominate) collapses to normalised `r = −0.01` — i.e. the
+degree-normalisation fully decouples connectivity from importance (guideline 1A).
 
 **Result (tanh, 5 seeds):** ranking is stable across data splits — mean pairwise
-Spearman **ρ = 0.943** (0.93–0.95) over 6,014 genes. Top genes: SRC, MAPK3,
-PIK3R1, RELA, UBC, RAC1 (coherent signaling/immune hubs for the IBD cohort).
+Spearman **ρ = 0.94** over ~6,000 genes. Top pathway is *Inflammatory bowel
+disease*; top genes are signaling/immune hubs (MAPK3, SRC, RAC1, RHOA, …).
