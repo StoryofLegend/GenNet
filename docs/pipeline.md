@@ -502,6 +502,57 @@ apples-to-apples.
 ### Assessing stability
 
 Stability is assessed **within each activation** across its 5 seeds — tanh exp
-{105, 143, 144, 145, 146} and relu exp {205, 243, 244, 245, 246}: AUC spread, and
-overlap / rank-correlation of gene/pathway importances from each run's
-`connection_weights.csv`.
+{105, 143, 144, 145, 146} and relu exp {205, 243, 244, 245, 246}: AUC spread (Step
+5a `--mode multiseed`), and rank-correlation of gene importances (Step 6,
+`summarize_importance.py`).
+
+## Step 6 — Gene importance (weight-based, 2A)
+
+First step of the gene-importance / ISN work (see `docs/project_context.md` §3).
+Weight-based importance is the **GenNet-native baseline** — deterministic, needs
+no background data — that SHAP (2B) and perturbation (2C) later validate. Model
+hierarchy: **SNP → gene → pathway → phenotype**.
+
+It sources directly from the trained **weights**, *not* from
+`connection_weights.csv` (~31 GB/seed): it rebuilds the model with GenNet's own
+`load_trained_network` and reuses GenNet's weight↔edge alignment (the same one
+`create_importance_csv` uses, validated to match `connection_weights.csv`
+exactly), keeping only the small per-layer edge tables instead of the
+combinatorial SNP→gene→pathway join that makes the CSV huge. Weights-only, so no
+forward pass / GPU — it runs on the login node (~30 s/model).
+
+**Scripts:** `pipeline/05_importance/`
+- `compute_weight_importance.py` — one experiment → gene / pathway / pair CSVs
+- `run_importance.sh` — every experiment in a results folder
+- `summarize_importance.py` — cross-seed Spearman stability + merged CSV
+
+```bash
+bash pipeline/05_importance/run_importance.sh results/tanh
+python pipeline/05_importance/summarize_importance.py \
+    reports/importance/GenNet_experiment_{105,143,144,145,146} --name tanh
+```
+
+Outputs: `reports/importance/<exp>/{gene,pathway,pair}_importance.csv` per run, and
+`reports/importance/tanh_gene_stability.csv` across seeds.
+
+**Importance definitions:**
+
+| Object | Measure | Notes |
+|---|---|---|
+| Gene (node) | `importance_sum = Σ|w_gene→pathway|`; `importance_mean = sum ÷ degree` | `mean` is the connectivity-normalised view (guideline 1A) so hub genes don't dominate |
+| Pathway (node) | `in_importance_sum / mean` over incoming gene→pathway weights, plus `degree` | |
+| Gene pair (i,j) | `Σ_p |w_i→p| · |w_j→p|` over **shared** pathways `p` | non-zero only on existing co-memberships (guideline 1B — GenNet has no gene–gene edge); hub pathways with >200 genes are skipped (`--max-genes-per-pathway`) |
+
+**Duplicate handling (important).** The topology repeats each gene→pathway
+connection once per SNP under the gene, so the raw mask holds duplicate
+`(gene_node, pathway_node)` coordinates (e.g. SMAD3 = 3990 rows for 105 real
+pathways, which would inflate importance ~38× and create bogus self-pairs).
+Duplicates are collapsed to one effective weight per connection with
+`--edge-agg` (default `mean`); a gene/pathway *name* spanning multiple node
+indices (e.g. ACOT7 = 2 nodes) is collapsed with `--name-agg` (default `mean`).
+**Rule: aggregate duplicates by mean/median, never `drop_duplicates`.**
+`--edge-agg sum` instead reproduces the forward-pass contribution.
+
+**Result (tanh, 5 seeds):** ranking is stable across data splits — mean pairwise
+Spearman **ρ = 0.943** (0.93–0.95) over 6,014 genes. Top genes: SRC, MAPK3,
+PIK3R1, RELA, UBC, RAC1 (coherent signaling/immune hubs for the IBD cohort).
