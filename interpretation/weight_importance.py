@@ -126,3 +126,50 @@ def make_importance_values_input(model, masks):
 
         importance["percentage"] = abs(importance["importance_0"]) / sum(abs(importance["importance_0"]))
     return importance
+
+def make_gene_importance(datapath, model, masks):
+    '''
+    Weight-based gene importance: sum of the absolute gene->pathway weights per gene,
+    collapsing the SNP-duplicated edges by the mean of their signed weights.
+    '''
+    GENE_LAYER = 1  # SNP(0) -> Gene(1) -> Pathway(2): gene is the source of layer 1
+    if len(masks) <= GENE_LAYER:
+        raise ValueError("Expected a SNP->Gene->Pathway network (>=2 masks), got %d" % len(masks))
+
+    mask = masks[GENE_LAYER]
+    weights = model.get_layer(name="LocallyDirected_" + str(GENE_LAYER)).get_weights()[0]
+
+    edges = pd.DataFrame({
+        "gene_node": mask.row,
+        "pathway_node": mask.col,
+        "weight": weights.mean(axis=1),
+    })
+
+    pair_importance = edges.groupby(["gene_node", "pathway_node"], as_index=False)["weight"].mean()
+    pair_importance["abs_weight"] = pair_importance["weight"].abs()
+
+    # Gene importance: sum over the gene's pathways + hub-normalised mean.
+    gene_importance = (pair_importance
+                       .groupby("gene_node", as_index=False)
+                       .agg(importance_sum=("abs_weight", "sum"),
+                            degree=("pathway_node", "nunique")))
+    gene_importance["importance_mean"] = gene_importance["importance_sum"] / gene_importance["degree"]
+
+    network_csv = pd.read_csv(datapath + "/topology.csv")
+    gene_names = (network_csv[["layer1_node", "layer1_name"]].drop_duplicates()
+                  .rename(columns={"layer1_node": "gene_node", "layer1_name": "gene"}))
+    pathway_names = (network_csv[["layer2_node", "layer2_name"]].drop_duplicates()
+                     .rename(columns={"layer2_node": "pathway_node", "layer2_name": "pathway"}))
+
+    gene_importance = gene_importance.merge(gene_names, on="gene_node", how="left")
+    pair_importance = (pair_importance.merge(gene_names, on="gene_node", how="left")
+                                      .merge(pathway_names, on="pathway_node", how="left"))
+
+    gene_importance = (gene_importance[["gene", "gene_node", "importance_sum", "degree", "importance_mean"]]
+                       .sort_values("importance_sum", ascending=False).reset_index(drop=True))
+    pair_importance = (pair_importance[["gene", "pathway", "gene_node", "pathway_node", "abs_weight"]]
+                       .sort_values("abs_weight", ascending=False).reset_index(drop=True))
+
+    return gene_importance, pair_importance
+
+
