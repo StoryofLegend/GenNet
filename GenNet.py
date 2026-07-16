@@ -325,7 +325,7 @@ class ArgumentParser():
         parser_topology.add_argument(
             "-type",
             default='get_weight_scores', type=str,
-            choices=['get_weight_scores', 'NID', 'RLIPP', 'DFIM',"PathExplain","DeepExplain"],
+            choices=['get_weight_scores', 'get_gene_importance', 'NID', 'RLIPP', 'DFIM',"PathExplain","DeepExplain"],
             help="choose interpretation method, choice")
         parser_topology.add_argument(
             "-resultpath",

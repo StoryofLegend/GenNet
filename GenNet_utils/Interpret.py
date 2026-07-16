@@ -13,7 +13,7 @@ import shap
 import interpretation.DFIM as DFIM
 from tensorflow.keras.optimizers.legacy import Adam
         
-from interpretation.weight_importance import make_importance_values_input
+from interpretation.weight_importance import make_importance_values_input, make_gene_importance
 from interpretation.NID import Get_weight_tsang, GenNet_pairwise_interactions_topn
 
 from GenNet_utils.Train_network import load_trained_network
@@ -23,6 +23,8 @@ from GenNet_utils.Dataloader import EvalGenerator
 def interpret(args):
     if args.type == 'get_weight_scores':
         get_weight_scores(args)
+    elif args.type == 'get_gene_importance':
+        get_gene_scores(args)
     elif args.type == 'NID':
         get_NID_scores(args)
     elif args.type == 'DeepExplain':
@@ -46,6 +48,18 @@ def get_weight_scores(args):
     else:
         weight_importance = make_importance_values_input(model, masks=masks)
         np.save(args.resultpath + "/weight_importance.npy", weight_importance)
+
+def get_gene_scores(args):
+    model, masks = load_trained_network(args)
+
+    gene_file = args.resultpath + "/gene_importance.csv"
+    pair_file = args.resultpath + "/pair_importance.csv"
+    if os.path.exists(gene_file):
+        print('gene importance Done')
+    else:
+        gene_importance, pair_importance = make_gene_importance(args.datapath, model, masks)
+        gene_importance.to_csv(gene_file, index=False)
+        pair_importance.to_csv(pair_file, index=False)
 
 
 def get_DeepExplainer_scores(args):
