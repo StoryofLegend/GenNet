@@ -535,7 +535,8 @@ def remove_batchnorm_model(model, masks, keep_cov = False):
         return model
     
             
-    for layer in original_model.layers[1:]: 
+    cov_removed = False
+    for layer in original_model.layers[1:]:
         # Skip BatchNormalization layers
         if not isinstance(layer, tf.keras.layers.BatchNormalization):
             # Handle LocallyDirected1D layer with custom arguments
@@ -547,7 +548,9 @@ def remove_batchnorm_model(model, masks, keep_cov = False):
                 x = new_layer(x)
                 mask_num = mask_num + 1
             elif "_cov" in layer.name and not keep_cov:
-                pass
+                cov_removed = True
+            elif cov_removed and isinstance(layer, tf.keras.layers.Activation):
+                pass  # drop the cov head's trailing activation -> avoids double sigmoid
             else:
                 # Add other layers as they are
                 x = layer.__class__.from_config(layer.get_config())(x)
