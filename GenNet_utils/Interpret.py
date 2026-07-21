@@ -86,7 +86,7 @@ def get_DeepExplainer_scores(args):
     xval = xval if args.regression else xval[yval==0,:]
     xtest = xtest if args.regression else xtest[ytest==1,:]
     
-    explainer  = shap.DeepExplainer((model.input, model.output), )
+    explainer  = shap.DeepExplainer((model.input, model.output), xval)
     print("Created explainer")
 
     if os.path.exists( args.resultpath+ "/DeepExplain_test.npy"):
