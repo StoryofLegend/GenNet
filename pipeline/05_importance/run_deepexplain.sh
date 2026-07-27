@@ -3,12 +3,27 @@
 #
 # Runs `GenNet.py interpret -type DeepExplain`, which builds shap.DeepExplainer on the
 # trained model (background = validation CONTROLS, explained set = test CASES) and writes
-# `DeepExplain_test.npy` (one |SHAP| value per SNP, length = inputsize) into each
-# experiment folder. Lift SNP -> gene afterwards via topology.csv for gene importance.
+# `DeepExplain_test.npy` (length = inputsize) into each experiment folder. Lift SNP -> gene
+# afterwards via topology.csv for gene importance.
 #
-# NOTE: this uses the model as-is (`model.output`), so it still has the double-sigmoid
-# — i.e. this is the "before/buggy" node run for the co-author's comparison. Only the
-# missing-background bug is fixed (Interpret.py:103).
+# What the saved value actually is: `np.max(shap_values, axis=0)` — the SIGNED SHAP maxed
+# over the ~4893 explained cases, NOT mean|SHAP|. It is an extreme-value statistic set by a
+# single patient (hence non-negative in practice), which makes it noisy: cross-seed top-100
+# SNP overlap is only 14-17/100.
+#
+# NOTE on the fixes: as of fe05b7d (2026-07-21) both the missing background and the
+# double-sigmoid are fixed, so the runs from 2026-07-22 onward are single-sigmoid — the
+# rebuilt model ends at `activation_2` with no `activation_3` (see the model_1 summary in
+# logs/05_importance/deepexplain_*.out).
+#
+# What is still WRONG here: `remove_batchnorm_model` DELETES the two BatchNorm layers
+# instead of folding them in, which collapses the genetic logit to ~0 and pins the sigmoid
+# near 0.5. Measured against the BN-intact logit run (results/tanh_gradexplain, see
+# run_gradexplain.sh), the magnitudes come out ~4600x too small, so the values here are
+# NOT interpretable in absolute terms. The RANKING does survive (Spearman 0.999-1.000,
+# gene consensus top-50 overlap 50/50), so this run is usable for rank-based comparison
+# only. For the primary node importance prefer
+# results/tanh_gradexplain/*/GradientExplain_test_meanabs.npy.
 #
 # --- Why num_sample_pat = 9942 ---
 # get_data() samples this many subjects (seeded, random_state=1) from BOTH the validation

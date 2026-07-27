@@ -325,7 +325,7 @@ class ArgumentParser():
         parser_topology.add_argument(
             "-type",
             default='get_weight_scores', type=str,
-            choices=['get_weight_scores', 'get_gene_importance', 'NID', 'RLIPP', 'DFIM',"PathExplain","DeepExplain"],
+            choices=['get_weight_scores', 'get_gene_importance', 'NID', 'RLIPP', 'DFIM',"PathExplain","DeepExplain","GradientExplain"],
             help="choose interpretation method, choice")
         parser_topology.add_argument(
             "-resultpath",
@@ -361,6 +361,12 @@ class ArgumentParser():
             required=False,
             default = 1000,
             help='Select a number of patients to sample for DFIM')
+        parser_topology.add_argument(
+            '-gx_nsamples',
+            type=int,
+            required=False,
+            default = 200,
+            help='GradientExplainer: background refs sampled per explained case')
         return parser_topology
 
 

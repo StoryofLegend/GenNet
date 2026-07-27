@@ -13,11 +13,11 @@ import shap
 import interpretation.DFIM as DFIM
 from tensorflow.keras.optimizers.legacy import Adam
         
-from interpretation.weight_importance import make_importance_values_input, make_gene_importance
+from interpretation.weight_importance import make_importance_values_input, make_gene_importance, make_pair_importance
 from interpretation.NID import Get_weight_tsang, GenNet_pairwise_interactions_topn
 
 from GenNet_utils.Train_network import load_trained_network
-from GenNet_utils.Create_network import remove_batchnorm_model, remove_cov
+from GenNet_utils.Create_network import remove_batchnorm_model, remove_cov, genetic_logit_model
 from GenNet_utils.Dataloader import EvalGenerator
 
 def interpret(args):
@@ -29,6 +29,8 @@ def interpret(args):
         get_NID_scores(args)
     elif args.type == 'DeepExplain':
         get_DeepExplainer_scores(args)
+    elif args.type == 'GradientExplain':
+        get_GradientExplainer_scores(args)
     elif args.type == 'RLIPP':
         get_RLIPP_scores(args)
     elif args.type == 'DFIM':
@@ -57,7 +59,8 @@ def get_gene_scores(args):
     if os.path.exists(gene_file):
         print('gene importance Done')
     else:
-        gene_importance, pair_importance = make_gene_importance(args.datapath, model, masks)
+        gene_importance = make_gene_importance(args.datapath, model, masks)
+        pair_importance = make_pair_importance(args.datapath, model, masks)
         gene_importance.to_csv(gene_file, index=False)
         pair_importance.to_csv(pair_file, index=False)
 
@@ -110,7 +113,63 @@ def get_DeepExplainer_scores(args):
         shap_values = np.max(explainer.shap_values(xtest)[0], axis=max_axis)
         np.save(args.resultpath + "/DeepExplain_test.npy", shap_values)
     
-    print("DeepExplain test results saved to " + args.resultpath)  
+    print("DeepExplain test results saved to " + args.resultpath)
+
+
+def get_GradientExplainer_scores(args):
+    """Node-level SHAP via shap.GradientExplainer on the genetic LOGIT (BN kept).
+
+    GradientExplainer uses ordinary autodiff (expected gradients), so it differentiates
+    through BatchNorm natively -- no BN removal, hence no logit collapse. We explain the
+    genotype-only genetic logit (``genetic_logit_model``) and store, per SNP:
+      * ``GradientExplain_test_meanabs.npy`` = mean_patients |SHAP|   (primary, ranking)
+      * ``GradientExplain_test_mean.npy``    = mean_patients  SHAP    (signed direction)
+      * ``GradientExplain_test_max.npy``     = max_patients   SHAP    (comparable to DeepExplain)
+
+    Knobs: -num_sample_pat (subjects sampled from val & test, as DeepExplain) and
+    -gx_nsamples (background refs drawn per explained case; default 200).
+    """
+    tf.compat.v1.disable_eager_execution()
+    print("Interpreting with GradientExplainer (genetic logit, BN kept):")
+
+    model, masks = load_trained_network(args)
+
+    xval, yval = EvalGenerator(datapath=args.path, genotype_path=args.genotype_path, batch_size=64,
+                               setsize=-1, one_hot=args.onehot, inputsize=-1,
+                               evalset="validation").get_data(sample_pat=args.num_sample_pat)
+    xtest, ytest = EvalGenerator(datapath=args.path, genotype_path=args.genotype_path, batch_size=64,
+                                 setsize=-1, one_hot=args.onehot, inputsize=-1,
+                                 evalset="test").get_data(sample_pat=args.num_sample_pat)
+
+    args.regression = np.unique(np.array(ytest)).shape[0] > 2
+    print("Loaded the data")
+
+    model = genetic_logit_model(model, masks)   # BN intact, genetic logit
+    model.compile(optimizer=Adam(learning_rate=1e-3),
+                  loss=tf.keras.losses.BinaryCrossentropy())
+
+    xval = xval[0]
+    xtest = xtest[0]
+    yval = yval.flatten()
+    ytest = ytest.flatten()
+
+    background = xval if args.regression else xval[yval == 0, :]   # controls
+    explain = xtest if args.regression else xtest[ytest == 1, :]   # cases
+    print("background:", background.shape, "explain:", explain.shape)
+
+    nsamples = getattr(args, "gx_nsamples", 200) or 200
+    explainer = shap.GradientExplainer((model.input, model.output), [background])
+    print("Created GradientExplainer (nsamples=%d)" % nsamples)
+
+    sv = explainer.shap_values(explain, nsamples=nsamples)
+    sv = sv[0] if isinstance(sv, list) else sv          # (n_cases, n_snps[, 1])
+    sv = np.squeeze(sv)
+    pat_axis = 0                                         # patients
+
+    np.save(args.resultpath + "/GradientExplain_test_meanabs.npy", np.mean(np.abs(sv), axis=pat_axis))
+    np.save(args.resultpath + "/GradientExplain_test_mean.npy",    np.mean(sv, axis=pat_axis))
+    np.save(args.resultpath + "/GradientExplain_test_max.npy",     np.max(sv, axis=pat_axis))
+    print("GradientExplain results saved to " + args.resultpath)
 
 
 def get_NID_scores(args):

@@ -564,7 +564,51 @@ def remove_batchnorm_model(model, masks, keep_cov = False):
         new_layer.set_weights(layer.get_weights())
 
     print(new_model.summary())
-        
+
+    return new_model
+
+
+def genetic_logit_model(model, masks):
+    """Genotype-only sub-model that returns the GENETIC LOGIT, BatchNorm kept intact.
+
+    Rebuilds the genetic head up to and including ``output_layer`` (the pre-sigmoid
+    Dense) and stops. This drops:
+      * ``activation_2`` (the genetic-head sigmoid) -> we explain the logit, not the
+        probability, avoiding sigmoid saturation flattening the attributions;
+      * the whole covariate branch (inputs_cov / concatenate_cov / batchnorm_cov /
+        output_layer_cov / activation_3).
+
+    Unlike ``remove_batchnorm_model`` this KEEPS the BatchNormalization layers, so the
+    logit does not collapse. It is meant for ``shap.GradientExplainer``, which uses
+    ordinary autodiff and differentiates through BN natively (DeepExplainer cannot).
+    """
+    original_model = model
+    inputs = tf.keras.Input(shape=original_model.input_shape[0][1:])
+    x = inputs
+
+    mask_num = 0
+    kept = []  # original layers we recreate, in order, for weight copying
+    for layer in original_model.layers[1:]:
+        if isinstance(layer, LocallyDirected1D):
+            config = layer.get_config()
+            x = LocallyDirected1D(filters=config['filters'],
+                                  mask=masks[mask_num],
+                                  name=config['name'])(x)
+            mask_num += 1
+            kept.append(layer)
+        else:
+            x = layer.__class__.from_config(layer.get_config())(x)
+            kept.append(layer)
+        if layer.name == "output_layer":   # genetic logit -> stop before activation_2
+            break
+
+    new_model = tf.keras.Model(inputs=inputs, outputs=x)
+
+    for new_layer, layer in zip(new_model.layers[1:], kept):
+        new_layer.set_weights(layer.get_weights())
+
+    print(new_model.summary())
+
     return new_model
 
 
@@ -574,6 +618,7 @@ def remove_cov(model, masks):
     x = inputs
 
     mask_num = 0
+    cov_removed = False
     for layer in original_model.layers[1:]: 
         # Skip BatchNormalization layers
         if isinstance(layer, LocallyDirected1D):
@@ -584,8 +629,8 @@ def remove_cov(model, masks):
             x = new_layer(x)
             mask_num = mask_num + 1
         elif "_cov" in layer.name:
-            pass
-        else:
+            cov_removed = True
+        elif not cov_removed:
             # Add other layers as they are
             x = layer.__class__.from_config(layer.get_config())(x)
 
