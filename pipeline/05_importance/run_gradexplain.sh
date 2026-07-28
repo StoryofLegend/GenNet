@@ -7,9 +7,7 @@
 # no BN removal, hence NO logit collapse (the DeepExplainer path had to delete BN, which
 # flattened the logit to std~1e-4 and produced ~1e-5 "dust" SHAP values). It writes three
 # per-SNP arrays (length = inputsize) into each experiment folder:
-#   GradientExplain_test_meanabs.npy  = mean_patients |SHAP|  (PRIMARY, for gene ranking)
-#   GradientExplain_test_mean.npy     = mean_patients  SHAP   (signed direction)
-#   GradientExplain_test_max.npy      = max_patients   SHAP   (comparable to DeepExplain)
+#   GradientExplain_test_meanabs.npy  = mean_patients |SHAP|  (node importance, for gene ranking)
 #
 # Defaults to results/tanh_gradexplain (the lightweight copy of the tanh experiments,
 # without connection_weights.csv). Originals in results/tanh keep their DeepExplain_test.npy
@@ -63,4 +61,4 @@ python GenNet.py interpret -type GradientExplain \
     -resultpath "$EXP" \
     -num_sample_pat "$NUM_SAMPLE_PAT" \
     -gx_nsamples "$GX_NSAMPLES"
-echo "=== done: $EXP -> $EXP/GradientExplain_test_{meanabs,mean,max}.npy ==="
+echo "=== done: $EXP -> $EXP/GradientExplain_test_meanabs.npy ==="

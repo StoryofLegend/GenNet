@@ -122,9 +122,7 @@ def get_GradientExplainer_scores(args):
     GradientExplainer uses ordinary autodiff (expected gradients), so it differentiates
     through BatchNorm natively -- no BN removal, hence no logit collapse. We explain the
     genotype-only genetic logit (``genetic_logit_model``) and store, per SNP:
-      * ``GradientExplain_test_meanabs.npy`` = mean_patients |SHAP|   (primary, ranking)
-      * ``GradientExplain_test_mean.npy``    = mean_patients  SHAP    (signed direction)
-      * ``GradientExplain_test_max.npy``     = max_patients   SHAP    (comparable to DeepExplain)
+      * ``GradientExplain_test_meanabs.npy`` = mean_patients |SHAP|   (node importance)
 
     Knobs: -num_sample_pat (subjects sampled from val & test, as DeepExplain) and
     -gx_nsamples (background refs drawn per explained case; default 200).
@@ -164,11 +162,8 @@ def get_GradientExplainer_scores(args):
     sv = explainer.shap_values(explain, nsamples=nsamples)
     sv = sv[0] if isinstance(sv, list) else sv          # (n_cases, n_snps[, 1])
     sv = np.squeeze(sv)
-    pat_axis = 0                                         # patients
 
-    np.save(args.resultpath + "/GradientExplain_test_meanabs.npy", np.mean(np.abs(sv), axis=pat_axis))
-    np.save(args.resultpath + "/GradientExplain_test_mean.npy",    np.mean(sv, axis=pat_axis))
-    np.save(args.resultpath + "/GradientExplain_test_max.npy",     np.max(sv, axis=pat_axis))
+    np.save(args.resultpath + "/GradientExplain_test_meanabs.npy", np.mean(np.abs(sv), axis=0))
     print("GradientExplain results saved to " + args.resultpath)
 
 
