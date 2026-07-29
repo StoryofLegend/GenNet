@@ -1,37 +1,23 @@
 #!/usr/bin/env python3
 """Summarise a folder of GenNet experiments into a single CSV report.
 
-Point this at a folder containing ``GenNet_experiment_<ID>_/`` experiment
-directories (e.g. ``results/tanh``). It reads the hyperparameters
-(``train_args.json``) and the AUCs (``pd_summary_results.csv``) of every
-experiment found underneath, and writes one CSV into a report folder meant to be
-committed to git (``results/`` itself is gitignored because of the multi-GB
-weight files, so the small CSV in ``reports/`` is the publishable artefact).
+Reads the hyperparameters (``train_args.json``) and AUCs
+(``pd_summary_results.csv``) of every ``GenNet_experiment_<ID>_/`` under the
+given folder. Output goes to ``reports/``, which is committed, unlike the
+multi-GB ``results/``.
 
-Two modes (``--mode``), to cover both situations the pipeline produces:
+Two modes:
 
-* ``gridsearch`` (default) — a hyperparameter sweep. Rows are sorted by
-  validation AUC (best first) so the winner is row 1. Output goes to
-  ``reports/gridsearch/<folder>_gridsearch.csv``.
-* ``multiseed`` — the SAME config trained across several ``seed_N`` splits.
-  Rows are sorted by seed and ``mean`` / ``std`` / ``min`` / ``max`` aggregate
-  rows are appended for the AUC columns, so the stability spread is visible.
-  Output goes to ``reports/multiseed/<folder>_multiseed.csv``.
+* ``gridsearch`` (default) — sorted by validation AUC, so the winner is row 1.
+* ``multiseed`` — one config across ``seed_N`` splits, sorted by seed, with
+  mean/std/min/max rows appended over the AUC columns.
 
-The activation is read from ``hidden_activation`` in the JSON (not the folder
-name), so the script is activation-agnostic and the same command works for tanh,
-relu and softplus by just pointing at a different folder. ``--sort``,
-``--aggregate/--no-aggregate``, ``--out-dir`` and ``--name`` override the
-per-mode defaults.
+Activation comes from ``hidden_activation`` in the JSON rather than the folder
+name, so the same command works for tanh, relu and softplus.
 
 Usage:
-    # grid searches (one per activation)
     python pipeline/04_report/summarize_experiments.py results/relu
-    python pipeline/04_report/summarize_experiments.py results/softplus
-
-    # multi-seed stability runs
     python pipeline/04_report/summarize_experiments.py results/tanh --mode multiseed
-    python pipeline/04_report/summarize_experiments.py results/relu --mode multiseed
 """
 
 from __future__ import annotations
@@ -70,7 +56,6 @@ def default_activation(problem_type: str) -> str:
 
 
 def parse_seed(datapath: str) -> str:
-    """Extract the seed number from a path like 'processed_data/seed_42/'."""
     if not datapath:
         return ""
     m = re.search(r"seed_(\d+)", datapath)
@@ -78,7 +63,6 @@ def parse_seed(datapath: str) -> str:
 
 
 def read_aucs(exp_dir: Path) -> tuple[str, str]:
-    """Read validation/test AUC from pd_summary_results.csv (key,value rows)."""
     summary = exp_dir / "pd_summary_results.csv"
     auc_val, auc_test = "", ""
     if not summary.exists():
@@ -97,7 +81,6 @@ def read_aucs(exp_dir: Path) -> tuple[str, str]:
 
 
 def read_train_log(exp_dir: Path) -> tuple[str, str]:
-    """Return (epochs_trained, best_val_loss) from train_log.csv if present."""
     log = exp_dir / "train_log.csv"
     if not log.exists():
         return "", ""
@@ -120,7 +103,6 @@ def read_train_log(exp_dir: Path) -> tuple[str, str]:
 
 
 def collect(exp_dir: Path) -> dict | None:
-    """Build one summary row from an experiment folder, or None if unreadable."""
     args_path = exp_dir / "train_args.json"
     if not args_path.exists():
         return None
@@ -154,7 +136,6 @@ def collect(exp_dir: Path) -> dict | None:
     }
 
 
-# Per-mode defaults: (out_dir, filename suffix, sort, aggregate).
 MODES = {
     "gridsearch": {"out_dir": "reports/gridsearch", "suffix": "gridsearch",
                    "sort": "auc", "aggregate": False},
@@ -162,7 +143,6 @@ MODES = {
                   "sort": "seed", "aggregate": True},
 }
 
-# AUC / loss columns the multiseed aggregate rows are computed over.
 AGG_FIELDS = ["auc_val", "auc_test", "best_val_loss"]
 
 
@@ -174,9 +154,8 @@ def _num(row: dict, field: str, default: float):
 
 
 def sort_rows(rows: list[dict], how: str) -> None:
-    """Sort rows in place: by validation AUC (desc), seed, or ID."""
+    """Sort in place; entries without the sort field go last."""
     if how == "auc":
-        # best val AUC first; runs without an AUC go last.
         rows.sort(key=lambda r: (0, -_num(r, "auc_val", 0.0))
                   if r.get("auc_val") else (1, 0.0))
     elif how == "seed":
@@ -188,7 +167,7 @@ def sort_rows(rows: list[dict], how: str) -> None:
 
 
 def parse_ids(spec: str) -> set:
-    """Parse an --ids spec like '142-146,150' into a set of string IDs."""
+    """Parse '142-146,150' into a set of string IDs."""
     ids = set()
     for part in spec.split(","):
         part = part.strip()
@@ -210,10 +189,8 @@ def config_key(row: dict) -> tuple:
 def dominant_config_rows(rows: list[dict]) -> list[dict]:
     """Rows for the config shared across the most distinct seeds.
 
-    A stability folder also holds the grid points it was selected from (same
-    seed_42, different hyperparameters). The stability set is the one config
-    that recurs across many seeds, so pick the config group with the most
-    distinct seeds (tie-break: most rows).
+    A stability folder also holds the grid points it was selected from, which
+    must not pollute the aggregates.
     """
     groups: dict[tuple, list[dict]] = {}
     for r in rows:
@@ -223,7 +200,6 @@ def dominant_config_rows(rows: list[dict]) -> list[dict]:
 
 
 def aggregate_rows(rows: list[dict]) -> list[dict]:
-    """Build mean/std/min/max rows over the AUC columns of the seed rows."""
     stats = {label: {} for label in ("mean", "std", "min", "max")}
     for field in AGG_FIELDS:
         vals = [v for r in rows if (v := _num(r, field, None)) is not None]
@@ -302,8 +278,7 @@ def main() -> None:
     if not results_path.is_dir():
         raise SystemExit(f"Not a directory: {results_path}")
 
-    # rglob so it works whether the experiment dirs sit directly in the given
-    # folder or one level down.
+    # rglob: experiment dirs may sit one level down.
     exp_dirs = sorted(results_path.rglob("GenNet_experiment_*_"),
                       key=lambda p: p.name)
     rows = [r for d in exp_dirs if d.is_dir() for r in (collect(d),) if r]
@@ -311,9 +286,7 @@ def main() -> None:
     if not rows:
         raise SystemExit(f"No readable experiments found under {results_path}/")
 
-    # Restrict to a subset: explicit --ids wins; otherwise multiseed mode keeps
-    # only the config shared across seeds (a stability folder also holds the grid
-    # points it was chosen from, which must not pollute the mean/std).
+    # --ids wins; otherwise multiseed keeps only the config shared across seeds.
     if args.ids:
         want = parse_ids(args.ids)
         rows = [r for r in rows if str(r["ID"]) in want]
