@@ -129,9 +129,8 @@ def make_importance_values_input(model, masks):
 
 def make_gene_importance(datapath, model, masks):
     '''
-    Node importance (weight-based): sum of the absolute gene->pathway weights per gene,
-    collapsing the SNP-duplicated edges by the mean of their signed weights.
-    Returns a per-gene DataFrame ranked by importance_sum.
+    Node importance (weight-based): Importance(g) = sum |w_g->pathways|.
+    One row per gene, ranked by importance_sum.
     '''
     GENE_LAYER = 1  # SNP(0) -> Gene(1) -> Pathway(2): gene is the source of layer 1
     if len(masks) <= GENE_LAYER:
@@ -146,23 +145,33 @@ def make_gene_importance(datapath, model, masks):
         "weight": weights.mean(axis=1),
     })
 
-    pair = edges.groupby(["gene_node", "pathway_node"], as_index=False)["weight"].mean()
+    network_csv = pd.read_csv(datapath + "/topology.csv")
+    gene_names = (network_csv[["layer1_node", "layer1_name"]].drop_duplicates()
+                  .rename(columns={"layer1_node": "gene_node", "layer1_name": "gene"}))
+    edges = edges.merge(gene_names, on="gene_node", how="inner")
+
+    # SNP-duplicated copies of one (node, pathway) edge -> mean of signed weights, then abs.
+    # pair = edges.groupby(["gene", "gene_node", "pathway_node"], as_index=False)["weight"].mean()
+    pair = edges.groupby(["gene", "gene_node", "pathway_node"], as_index=False)["weight"].sum()
     pair["abs_weight"] = pair["weight"].abs()
 
+    # A gene name is split over many nodes carrying the same pathways: replicates of the
+    # same edge. Average the MAGNITUDES -- averaging signed weights makes them cancel.
+    per_gene = pair.groupby(["gene", "pathway_node"], as_index=False)["abs_weight"].mean()
+
     # Gene importance: sum over the gene's pathways + hub-normalised mean.
-    gene_importance = (pair
-                       .groupby("gene_node", as_index=False)
+    gene_importance = (per_gene
+                       .groupby("gene", as_index=False)
                        .agg(importance_sum=("abs_weight", "sum"),
                             degree=("pathway_node", "nunique")))
     gene_importance["importance_mean"] = gene_importance["importance_sum"] / gene_importance["degree"]
 
-    network_csv = pd.read_csv(datapath + "/topology.csv")
-    gene_names = (network_csv[["layer1_node", "layer1_name"]].drop_duplicates()
-                  .rename(columns={"layer1_node": "gene_node", "layer1_name": "gene"}))
+    n_nodes = (pair.groupby("gene", as_index=False)["gene_node"].nunique()
+               .rename(columns={"gene_node": "n_gene_nodes"}))
+    gene_importance = gene_importance.merge(n_nodes, on="gene", how="left")
 
-    gene_importance = gene_importance.merge(gene_names, on="gene_node", how="left")
-
-    gene_importance = (gene_importance[["gene", "gene_node", "importance_sum", "degree", "importance_mean"]]
+    gene_importance = (gene_importance[["gene", "importance_sum", "degree",
+                                        "importance_mean", "n_gene_nodes"]]
                        .sort_values("importance_sum", ascending=False).reset_index(drop=True))
 
     return gene_importance

@@ -55,14 +55,12 @@ def get_gene_scores(args):
     model, masks = load_trained_network(args)
 
     gene_file = args.resultpath + "/gene_importance.csv"
-    pair_file = args.resultpath + "/pair_importance.csv"
     if os.path.exists(gene_file):
         print('gene importance Done')
     else:
         gene_importance = make_gene_importance(args.datapath, model, masks)
-        pair_importance = make_pair_importance(args.datapath, model, masks)
         gene_importance.to_csv(gene_file, index=False)
-        pair_importance.to_csv(pair_file, index=False)
+        print("wrote %d genes -> %s" % (len(gene_importance), gene_file))
 
 
 def get_DeepExplainer_scores(args):
