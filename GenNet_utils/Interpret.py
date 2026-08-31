@@ -14,6 +14,7 @@ import interpretation.DFIM as DFIM
 from tensorflow.keras.optimizers.legacy import Adam
         
 from interpretation.weight_importance import make_importance_values_input, make_gene_importance, make_pair_importance
+from interpretation.ablation import make_ablation_importance
 from interpretation.NID import Get_weight_tsang, GenNet_pairwise_interactions_topn
 
 from GenNet_utils.Train_network import load_trained_network
@@ -37,6 +38,8 @@ def interpret(args):
         get_DFIM_scores(args)
     elif args.type == 'PathExplain':
         get_pathexplain_scores(args)
+    elif args.type == 'Ablation':
+        get_ablation_scores(args)
     else:
         print("invalid type:", args.type)
         exit()
@@ -61,6 +64,55 @@ def get_gene_scores(args):
         gene_importance = make_gene_importance(args.datapath, model, masks)
         gene_importance.to_csv(gene_file, index=False)
         print("wrote %d genes -> %s" % (len(gene_importance), gene_file))
+
+
+def get_ablation_scores(args):
+    """Method 2C -- node ablation: Delta_y(g) = y_full - y_{g ablated}.
+
+    Ablates at the gene-layer activation (post-BatchNorm, so 0 is the neutral
+    "population-average gene" baseline) and measures the change in the GENETIC LOGIT.
+    Runs eagerly -- unlike the SHAP paths this needs no graph-mode explainer.
+
+    Subjects: test set, CASES only by default (same cohort DeepExplain/GradientExplain
+    explain, so the three methods rank over the same patients). ``-ablation_set all``
+    uses the whole test set instead.
+
+    Writes ``ablation_importance.csv`` (one row per gene) and, with
+    ``-ablation_per_patient``, ``ablation_per_patient.csv`` (genes x subjects) --
+    the per-subject deltas the ISN step needs.
+    """
+    print("Interpreting with node ablation (method 2C):")
+
+    model, masks = load_trained_network(args)
+
+    xtest, ytest = EvalGenerator(datapath=args.datapath, genotype_path=args.genotype_path,
+                                 batch_size=64, setsize=-1, one_hot=args.onehot, inputsize=-1,
+                                 evalset="test").get_data(sample_pat=args.num_sample_pat)
+    x = xtest[0]
+    ytest = ytest.flatten()
+    args.regression = np.unique(np.array(ytest)).shape[0] > 2
+
+    ablation_set = getattr(args, "ablation_set", "cases")
+    if ablation_set == "cases" and not args.regression:
+        x = x[ytest == 1, :]
+    print("Ablating over %d subjects (set=%s, regression=%s)" % (len(x), ablation_set, args.regression))
+
+    per_patient = bool(getattr(args, "ablation_per_patient", False))
+    result = make_ablation_importance(args.datapath, model, masks, x,
+                                      n_verify=getattr(args, "ablation_verify", 3),
+                                      per_patient=per_patient)
+
+    if per_patient:
+        importance, deltas = result
+        deltas.to_csv(args.resultpath + "/ablation_per_patient.csv")
+        print("wrote %d genes x %d subjects -> %s" % (deltas.shape[0], deltas.shape[1],
+                                                      args.resultpath + "/ablation_per_patient.csv"))
+    else:
+        importance = result
+
+    ablation_file = args.resultpath + "/ablation_importance.csv"
+    importance.to_csv(ablation_file, index=False)
+    print("wrote %d genes -> %s" % (len(importance), ablation_file))
 
 
 def get_DeepExplainer_scores(args):

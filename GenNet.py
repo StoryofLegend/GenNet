@@ -325,7 +325,7 @@ class ArgumentParser():
         parser_topology.add_argument(
             "-type",
             default='get_weight_scores', type=str,
-            choices=['get_weight_scores', 'get_gene_importance', 'NID', 'RLIPP', 'DFIM',"PathExplain","DeepExplain","GradientExplain"],
+            choices=['get_weight_scores', 'get_gene_importance', 'NID', 'RLIPP', 'DFIM',"PathExplain","DeepExplain","GradientExplain","Ablation"],
             help="choose interpretation method, choice")
         parser_topology.add_argument(
             "-resultpath",
@@ -367,6 +367,26 @@ class ArgumentParser():
             required=False,
             default = 200,
             help='GradientExplainer: background refs sampled per explained case')
+        parser_topology.add_argument(
+            '-ablation_set',
+            type=str,
+            required=False,
+            default='cases',
+            choices=['cases', 'all'],
+            help='Ablation: which test subjects to ablate over (cases only, as the SHAP '
+                 'methods explain, or the whole test set)')
+        parser_topology.add_argument(
+            '-ablation_verify',
+            type=int,
+            required=False,
+            default=3,
+            help='Ablation: genes checked against a full forward pass before the run '
+                 '(0 disables the check)')
+        parser_topology.add_argument(
+            '-ablation_per_patient',
+            action='store_true',
+            default=False,
+            help='Ablation: also write the per-subject delta matrix (genes x subjects)')
         return parser_topology
 
 
