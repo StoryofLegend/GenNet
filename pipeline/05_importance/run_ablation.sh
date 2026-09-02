@@ -94,9 +94,11 @@ done | sort)
 EXP="${EXPS[$((SLURM_ARRAY_TASK_ID - 1))]:-}"
 [ -n "$EXP" ] || { echo "No trained experiment at array index $SLURM_ARRAY_TASK_ID in $RESULTS_DIR"; exit 1; }
 
-# Interpret.py overwrites both outputs, but drop any stale file so a crashed run never
-# leaves a half-written CSV behind that looks current.
-rm -f "$EXP/ablation_importance.csv" "$EXP/ablation_per_patient.csv"
+# Do NOT delete the existing CSVs here. Interpret.py overwrites them on success, and
+# deleting up front means a crashed or pre-empted run destroys a good previous result
+# (including columns backfilled after the fact). Instead, refuse to start if a stale
+# *.tmp is lying around, and let the run replace the real files only when it finishes.
+rm -f "$EXP"/ablation_importance.csv.tmp "$EXP"/ablation_per_patient.csv.tmp
 
 echo "=== Ablation (2C): $EXP  (num_sample_pat=$NUM_SAMPLE_PAT set=$ABLATION_SET) ==="
 python GenNet.py interpret -type Ablation \

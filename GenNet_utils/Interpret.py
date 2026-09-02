@@ -102,16 +102,25 @@ def get_ablation_scores(args):
                                       n_verify=getattr(args, "ablation_verify", 3),
                                       per_patient=per_patient)
 
+    # Write via a .tmp + rename so an interrupted run leaves the previous good CSV in
+    # place instead of a truncated one. ablation_per_patient.csv is ~400 MB, so a
+    # partial write there is a real possibility, and both files are expensive to redo.
+    def _atomic_to_csv(frame, path, **kwargs):
+        tmp = path + ".tmp"
+        frame.to_csv(tmp, **kwargs)
+        os.replace(tmp, path)
+
     if per_patient:
         importance, deltas = result
-        deltas.to_csv(args.resultpath + "/ablation_per_patient.csv")
+        per_patient_file = args.resultpath + "/ablation_per_patient.csv"
+        _atomic_to_csv(deltas, per_patient_file)
         print("wrote %d genes x %d subjects -> %s" % (deltas.shape[0], deltas.shape[1],
-                                                      args.resultpath + "/ablation_per_patient.csv"))
+                                                      per_patient_file))
     else:
         importance = result
 
     ablation_file = args.resultpath + "/ablation_importance.csv"
-    importance.to_csv(ablation_file, index=False)
+    _atomic_to_csv(importance, ablation_file, index=False)
     print("wrote %d genes -> %s" % (len(importance), ablation_file))
 
 
