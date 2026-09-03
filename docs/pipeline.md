@@ -734,9 +734,37 @@ Selection uses `nsmallest(n, <that method's rank column>)`. Using `head(n)` woul
 the *same* genes for all four methods, because `method_comparison.csv` is sorted by
 combined rank.
 
-**Output:** `results/tanh/isn_gene_sets/` — `gene_set_{2A,2B,2C,combined}_top{N}.csv`,
-`gene_set_membership_top{N}.csv`, `gene_set_overlap.csv`.
+**Output:** `results/tanh/isn_gene_sets/` — `gene_set_{2A,2B,2C,combined,INPUT_0}_top{N}.csv`,
+`gene_set_membership_top{N}.csv`, `gene_set_overlap.csv`, `gene_set_sizes.csv`.
 Mean pairwise Jaccard falls from 0.585 (top50) to 0.383 (top250); 2A is the outlier.
+
+**INPUT_0 and INPUT_B** (the supervisor's step 1). Methods A/B/C are 2A/2B/2C, so:
+
+- **INPUT_B** = `gene_set_2B_top{N}.csv`. It is not written again under a second name.
+- **INPUT_0** = the **union** of the top-N sets of 2A, 2B and 2C.
+
+INPUT_0 is *not* `combined`, and the two must not be swapped: `combined` takes the top N
+of the mean rank, INPUT_0 takes the union of three top-N sets. At N=50 they share only
+45 genes, and 33 INPUT_0 genes are absent from `combined`.
+
+Because it is a union, |INPUT_0| ≫ N — and that size, not the cutoff, is what has to be
+matched against Gaia's HotZone gene-set size. `gene_set_sizes.csv` is the table to pick
+`x` from:
+
+| cutoff N | 2A / 2B / 2C / combined | **INPUT_0** | in all 3 |
+|---|---|---|---|
+| 50 | 50 | **78** | 31 |
+| 100 | 100 | **181** | 43 |
+| 150 | 150 | **283** | 55 |
+| 200 | 200 | **387** | 66 |
+| 250 | 250 | **486** | 76 |
+
+ISN cost scales with the *square* of the gene count, so INPUT_0 at cutoff N costs about
+what a single method at cutoff |INPUT_0| would — budget from this table, not the cutoff.
+
+`n_methods` in the membership table counts **2A/2B/2C only**. Counting `combined` (a
+mean-rank ordering over the same three) or INPUT_0 (their union) would double-count the
+same evidence; `in_INPUT_0` is a separate boolean.
 
 ### Step 10b — Extract activations
 
@@ -780,8 +808,35 @@ primary results.
 python pipeline/06_isn/make_isn_input.py results/tanh
 ```
 
-**Output:** `results/tanh/isn_input/isn_input_{method}_top{N}_seed{S}.csv` (patients ×
-genes, index = `patient_id`) plus `isn_input_manifest.csv`.
+```bash
+python pipeline/06_isn/make_isn_input.py results/tanh --reference 1   # cases-only arm
+```
+
+**Output:** `results/tanh/isn_input/isn_input_{method}_top{N}_seed{S}[_ref1].csv`
+(patients × genes, index = `patient_id`) plus `isn_input_manifest[_ref1].csv`.
+
+**The reference population is fixed here, not in `lioness.py`** — this is the
+supervisor's step 2, and getting it wrong is silent:
+
+| `--reference` | rows | notation |
+|---|---|---|
+| `01` (default) | all 9,942 test subjects, cases + controls | ISN_01,i |
+| `1` | the 4,893 cases only | ISN_1,i |
+
+LIONESS derives its reference from *every sample in the matrix it is handed*
+(`N·P_all − (N−1)·P_without_i`, with the coexpression rebuilt on all samples but *i*).
+So netZooPy's `subset_numbers`/`start`/`end` and `lioness.py --max-patients` only choose
+which samples *receive* an ISN — subsetting there gives ISN_01,i evaluated on cases, not
+ISN_1,i. The controls have to leave the matrix before PANDA sees it.
+
+`01` keeps the historical unsuffixed filenames, so nothing already computed is
+invalidated; `1` appends `_ref1` throughout (input, output dir, manifest).
+
+Genes that are **exactly constant** (sd < 1e-12) are now always dropped: a zero-variance
+column has an undefined correlation and PANDA propagates the NaN through the whole
+network, so `lioness.py` would refuse to run. This is a correctness floor, distinct from
+`--min-sd` thresholding, and it bites mainly in the cases-only arm where *n* halves. The
+count is in the manifest as `n_constant_dropped`.
 
 `--min-sd` defaults to **0** (report-only). Filtering would leave each method a
 different gene count (2A ~53 vs 2C ~82 at top-100), making network sizes and HotZone
@@ -795,13 +850,24 @@ be at the gene/edge level, never patient by patient.
 
 **Scripts:** `pipeline/06_isn/lioness.py`, `run_lioness.sh`
 
+The grid is `METHODS × CUTOFFS × SEEDS × REFS`; the array size must equal its product.
+
 ```bash
-sbatch --array=1-8 pipeline/06_isn/run_lioness.sh                       # seed 42, top50/100
-SEEDS="42 43 44 45 46" sbatch --export=ALL --array=1-40%6 pipeline/06_isn/run_lioness.sh
-CUTOFFS="150 200 250" sbatch --export=ALL --mem=180G --array=1-12%2 pipeline/06_isn/run_lioness.sh
+sbatch --array=1-10 pipeline/06_isn/run_lioness.sh                      # 5 methods, top50/100
+SEEDS="42 43 44 45 46" sbatch --export=ALL --array=1-50%6 pipeline/06_isn/run_lioness.sh
+CUTOFFS="150 200 250" sbatch --export=ALL --mem=180G --array=1-15%2 pipeline/06_isn/run_lioness.sh
+
+# the supervisor's two arms, INPUT_0 vs INPUT_B (= 2B), both reference strategies
+METHODS="INPUT_0 2B" CUTOFFS="50 100" REFS="01 1" sbatch --export=ALL \
+    --mem=120G --array=1-8%2 pipeline/06_isn/run_lioness.sh
 ```
 
-**Output** (per config, `results/tanh/isn/<method>_top<N>_seed<S>/`):
+`REFS` selects the arm (`01` → `ISN_01,i`, `1` → `ISN_1,i`) and picks up the matching
+`_ref1` matrices; build those with `make_isn_input.py --reference 1` first. The chosen
+reference is recorded in `isn_run_info.json` as `reference`/`isn_label`, so a finished
+run says which strategy produced it.
+
+**Output** (per config, `results/tanh/isn/<method>_top<N>_seed<S>[_ref1]/`):
 
 | File | Description |
 |---|---|
@@ -863,7 +929,21 @@ For comparison, the supervisor's original chain can be run over the same grid.
 ```bash
 CUTOFFS=100 SEEDS=42 sbatch --export=ALL --array=1-4 pipeline/06_isn/run_lioness_original.sh
 sbatch --array=1-40%4 pipeline/06_isn/run_lioness_original.sh          # full grid, ~85 GB
+
+# both reference strategies, one cutoff and seed (~7 GB)
+CUTOFFS=50 SEEDS=42 REFS="01 1" sbatch --export=ALL --array=1-8%4 \
+    pipeline/06_isn/run_lioness_original.sh
 ```
+
+The wrapper carries the same `METHODS × CUTOFFS × SEEDS × REFS` grid and the same
+`_ref1` naming as `run_lioness.sh`, so the two chains stay comparable config for config.
+**`lioness_original.py` itself is still untouched beyond the two documented changes** —
+the reference lives in the input matrix, so the wrapper only picks a different file.
+
+`INPUT_0` is deliberately *not* in this script's `METHODS` default. Output here is a
+full N² CSV, so a union set is expensive: 78 genes at top50 is ~1.2 GB per config and
+181 genes at top100 is ~6.3 GB (roughly double with the cleaned copy). Pass it
+explicitly, for a cutoff and seed count you have checked you have room for.
 
 `lioness_original.py` was changed in **two** places only (23 lines); the untouched copy
 is `lioness_original.py.supervisor_untouched`:
