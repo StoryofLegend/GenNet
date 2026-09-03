@@ -61,7 +61,8 @@ isn_edges.csv       source, target for each kept edge (upper triangle, no self-l
 isn_weights.npy     (n_edges, n_patients) float32, symmetrised   [unless --no-full]
 isn_patients.csv    patient_id in the column order of the above
 isn_edge_stats.csv  source, target, mean, sd, var across individuals -- HotZone input
-isn_run_info.json   shapes, timings, asymmetry diagnostics, settings
+isn_run_info.json   shapes, timings, asymmetry diagnostics, settings, and which
+                    reference population the ISNs came from (ISN_01,i or ISN_1,i)
 
 Usage
 -----
@@ -118,6 +119,12 @@ def main() -> int:
                    help="patients x genes CSV from make_isn_input.py (index = patient_id)")
     p.add_argument("--outdir", required=True, type=Path,
                    help="output folder (one per method/cutoff/seed combination)")
+    p.add_argument("--reference", choices=("01", "1"), default=None,
+                   help="metadata only: which reference population the input matrix "
+                        "holds (01 = all subjects -> ISN_01,i, 1 = cases only -> "
+                        "ISN_1,i). Inferred from the input filename's _ref suffix if "
+                        "omitted. It does NOT subset anything - the reference is "
+                        "whatever make_isn_input.py wrote into the file.")
     p.add_argument("--ncores", type=int, default=1, help="LIONESS worker processes")
     p.add_argument("--alpha", type=float, default=0.1, help="PANDA learning rate")
     p.add_argument("--no-full", action="store_true",
@@ -140,6 +147,8 @@ def main() -> int:
     t_start = time.time()
 
     # --- input ---------------------------------------------------------------
+    if args.reference is None:
+        args.reference = "1" if args.input.stem.endswith("_ref1") else "01"
     exp = pd.read_csv(args.input, index_col=0)
     if args.max_patients:
         exp = exp.iloc[:args.max_patients]
@@ -157,7 +166,7 @@ def main() -> int:
     if flat:
         hint = ("this is an artefact of --max-patients, not of the data; rerun "
                 "without it" if args.max_patients else
-                "drop them with make_isn_input.py --min-sd before building an ISN")
+                "regenerate the matrix - make_isn_input.py drops constant genes")
         raise ValueError(f"{len(flat)} gene(s) are constant across these "
                          f"{len(exp)} patients (e.g. {flat[:5]}) - {hint}")
 
@@ -315,7 +324,9 @@ def assemble_and_write(args, lio, exp, ncores, raw_dir, corr, off,
         np.save(tmp, edge_weights)
         tmp.replace(args.outdir / "isn_weights.npy")
 
-    info = {"input": str(args.input), "n_patients": int(edge_weights.shape[1]),
+    info = {"input": str(args.input), "reference": args.reference,
+            "isn_label": f"ISN_{args.reference},i",
+            "n_patients": int(edge_weights.shape[1]),
             "n_genes": n_gene, "n_edges": int(edge_weights.shape[0]),
             "seconds_panda": round(t_panda, 1), "seconds_lioness": round(t_lioness, 1),
             "seconds_total": round(time.time() - t_start, 1),
