@@ -53,9 +53,12 @@
 # configuration. The old full-N2 CSV format was 1.9 GB at top100 and 12 GB at top250,
 # which is what made a 4-method grid impossible.
 #
-# Submit (array size must equal METHODS x CUTOFFS x SEEDS x REFS):
-#   sbatch --array=1-10 pipeline/06_isn/run_lioness.sh                 # 5 methods x 2 cutoffs
-#   sbatch --array=1-10 pipeline/06_isn/run_lioness.sh results/tanh
+# Submit -- the defaults below ARE the spec grid, so this is the whole ISN stage:
+#   sbatch pipeline/06_isn/run_lioness.sh
+#
+# Anything else overrides the grid from the environment, and then the array size must
+# equal METHODS x CUTOFFS x SEEDS x REFS (the script refuses a mismatched index):
+#   METHODS="2A 2C" sbatch --export=ALL --array=1-20%4 pipeline/06_isn/run_lioness.sh
 #
 # Both reference strategies, one seed, two cutoffs (5 x 2 x 1 x 2 = 20):
 #   REFS="01 1" sbatch --export=ALL --array=1-20%4 pipeline/06_isn/run_lioness.sh
@@ -84,17 +87,22 @@
 #SBATCH --time=05:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=60G
+#SBATCH --mem=180G
+#SBATCH --array=1-40%4
 
 set -euo pipefail
 
 RESULTS_DIR="${1:-results/tanh}"
 # Grid is overridable from the environment so the density arm can be submitted without
 # editing the file:  CUTOFFS="150 200 250" sbatch --array=1-12 ... --export=ALL,CUTOFFS
-read -r -a METHODS <<< "${METHODS:-2A 2B 2C combined INPUT_0}"
-read -r -a CUTOFFS <<< "${CUTOFFS:-50 100}"
-read -r -a SEEDS   <<< "${SEEDS:-42}"
-read -r -a REFS    <<< "${REFS:-01}"
+# Defaults ARE the supervisor's spec grid: INPUT_0 vs INPUT_B (= 2B), the two
+# cutoffs, all five seeds, both reference strategies. 2 x 2 x 5 x 2 = 40 configs,
+# which is what the #SBATCH --array line above is sized for. Change one and change
+# the other, or pass --array on the command line.
+read -r -a METHODS <<< "${METHODS:-INPUT_0 2B}"
+read -r -a CUTOFFS <<< "${CUTOFFS:-50 250}"
+read -r -a SEEDS   <<< "${SEEDS:-42 43 44 45 46}"
+read -r -a REFS    <<< "${REFS:-01 1}"
 NCORES="${NCORES:-4}"
 
 source /home/u/f099193/miniconda3/etc/profile.d/conda.sh
