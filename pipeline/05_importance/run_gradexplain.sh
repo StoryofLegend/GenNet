@@ -29,8 +29,14 @@
 #SBATCH --error=/home/u/f099193/_SHARE_/Research/GEN/BIO3/Kristian/exp/GenNet/logs/05_importance/gradexplain_%a_%j.err
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=k.kovacev@campus.unimib.it
+# partition=gpu is ptfgpu001: 64 CPU / 931 GB / 2x H100, Hidden=YES (so plain
+# `sinfo` omits it -- use `sinfo -a`), AllowGroups=ALL, MaxTime=UNLIMITED, and in
+# practice never queued. We take it for the CPUs and RAM only.
+# NO --gres: probed 2026-09-04, env_GenNet TF 2.11 wants libcudart.so.11.0 /
+# libcudnn.so.8 and the node has CUDA 12.8, so tf.config.list_physical_devices('GPU')
+# is empty and this runs on CPU regardless. Requesting a GPU would only block a
+# real GPU user. See CLAUDE.md.
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
 #SBATCH --time=48:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
